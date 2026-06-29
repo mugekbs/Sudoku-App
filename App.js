@@ -1,7 +1,7 @@
 const SIZE = 9;
 const BOX = 3;
 const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-const STORAGE_KEY = 'sudoku-focus-state-v1';
+const STORAGE_KEY = 'kirecte-trocki-state-v2';
 const LEVELS = {
   uzman: { label: 'Uzman', holes: 54, subtitle: 'Sert ama akıcı' },
   ekstrem: { label: 'Ekstrem', holes: 60, subtitle: 'Çok az ipucu' },
@@ -61,11 +61,21 @@ function newState(level = 'uzman') {
   const { puzzle, solution } = generate(level);
   return { level, puzzle, solution, grid: clone(puzzle), notes: notesGrid(), selected: { row: 0, col: 0 }, noteMode: false, mistakes: 0, hints: 3, elapsed: 0, history: [] };
 }
+function isValidSavedState(saved) {
+  return saved?.puzzle?.length === SIZE
+    && saved?.solution?.length === SIZE
+    && saved?.grid?.length === SIZE
+    && saved?.notes?.length === SIZE
+    && saved?.selected
+    && LEVELS[saved.level];
+}
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (saved?.puzzle && saved?.solution && saved?.grid) return saved;
-  } catch { localStorage.removeItem(STORAGE_KEY); }
+    if (isValidSavedState(saved)) return { ...saved, elapsed: saved.elapsed || 0, history: saved.history || [] };
+  } catch {
+    localStorage.removeItem(STORAGE_KEY);
+  }
   return newState();
 }
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
@@ -157,4 +167,11 @@ document.addEventListener('click', (event) => {
   if (button.dataset.action === 'undo') undo();
   if (button.dataset.action === 'erase') erase();
 });
-render();
+try {
+  render();
+} catch (error) {
+  console.error('Kireçte Troçki başlatılamadı, kayıt sıfırlanıyor:', error);
+  localStorage.removeItem(STORAGE_KEY);
+  state = newState();
+  render();
+}
