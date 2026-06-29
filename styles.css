@@ -31,10 +31,9 @@ button:active { transform: scale(.98); }
 .tools button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; background: #edf1f7; color: #152238; }
 .tools .active-tool { background: #ffeab6; }
 .win { margin-top: 16px; display: flex; align-items: center; gap: 8px; background: #e9f9ef; color: #176a35; padding: 14px; border-radius: 18px; font-weight: 700; }
-.board-wrap { padding: clamp(14px, 3vw, 28px); overflow: hidden; }
-.catwalk { position: relative; height: 46px; margin: -4px 4px 8px; border-bottom: 3px solid #111827; }
-.cat { position: absolute; left: -48px; bottom: -2px; display: inline-block; font-size: 2.2rem; filter: grayscale(1) contrast(1.4) brightness(.25); animation: cat-walk 8s linear infinite; }
-@keyframes cat-walk { from { transform: translateX(-12px) scaleX(1); } 49% { transform: translateX(calc(100vw - 180px)) scaleX(1); } 50% { transform: translateX(calc(100vw - 180px)) scaleX(-1); } 99% { transform: translateX(-12px) scaleX(-1); } to { transform: translateX(-12px) scaleX(1); } }
+.board-wrap { position: relative; padding: clamp(14px, 3vw, 28px); overflow: hidden; }
+.catwalk { position: absolute; top: 8px; right: 18px; z-index: 4; pointer-events: none; }
+.cat { display: inline-block; font-size: 2.35rem; filter: grayscale(1) contrast(1.4) brightness(.25); transform: rotate(7deg); }
 .board { aspect-ratio: 1; display: grid; grid-template-columns: repeat(9, 1fr); border: 3px solid #152238; border-radius: 18px; overflow: hidden; background: #152238; gap: 1px; }
 .cell { position: relative; display: grid; place-items: center; min-width: 0; aspect-ratio: 1; border: 0; background: #fff; color: #3762f5; font-size: clamp(1.25rem, 4vw, 2.2rem); font-weight: 700; }
 .cell:nth-child(3n) { border-right: 2px solid #152238; }
