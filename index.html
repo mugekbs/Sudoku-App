@@ -1,1 +1,223 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sudoku Focus</title>
+    <style>
+:root {
+  color: #152238;
+  background: #f4f7fb;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button { font: inherit; }
+.app-shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 48px; }
+.hero { display: flex; justify-content: space-between; gap: 24px; align-items: center; margin-bottom: 28px; }
+.eyebrow { color: #3d66ff; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 8px; }
+h1 { font-size: clamp(2rem, 5vw, 4.2rem); line-height: 0.95; margin: 0; max-width: 720px; }
+.intro { color: #5f6d82; font-size: 1.08rem; max-width: 620px; }
+.new-game, .tools button, .level, .number-pad button { border: 0; cursor: pointer; border-radius: 18px; transition: transform .15s ease, box-shadow .15s ease, background .15s ease; }
+.new-game { display: inline-flex; align-items: center; gap: 10px; background: #152238; color: white; padding: 14px 18px; box-shadow: 0 18px 40px #15223833; white-space: nowrap; }
+button:active { transform: scale(.98); }
+.game-panel { display: grid; grid-template-columns: 330px 1fr; gap: 28px; align-items: start; }
+.sidebar, .board-wrap { background: white; border: 1px solid #dce4f2; border-radius: 32px; box-shadow: 0 20px 70px #6b7a9022; }
+.sidebar { padding: 22px; }
+.level-grid { display: grid; gap: 12px; }
+.level { background: #f4f7fb; text-align: left; padding: 16px; color: #152238; border: 2px solid transparent; }
+.level strong, .level span { display: block; }
+.level span { color: #75839a; font-size: .9rem; margin-top: 4px; }
+.level.active { background: #eef3ff; border-color: #3d66ff; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0; }
+.stats span { background: #f8f9fc; border-radius: 18px; padding: 12px; color: #6b7688; font-size: .9rem; }
+.stats strong { display: block; color: #152238; font-size: 1.3rem; }
+.tools { display: grid; gap: 10px; }
+.tools button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; background: #edf1f7; color: #152238; }
+.tools .active-tool { background: #ffeab6; }
+.win { margin-top: 16px; display: flex; align-items: center; gap: 8px; background: #e9f9ef; color: #176a35; padding: 14px; border-radius: 18px; font-weight: 700; }
+.board-wrap { padding: clamp(14px, 3vw, 28px); }
+.board { aspect-ratio: 1; display: grid; grid-template-columns: repeat(9, 1fr); border: 3px solid #152238; border-radius: 18px; overflow: hidden; background: #152238; gap: 1px; }
+.cell { position: relative; display: grid; place-items: center; min-width: 0; aspect-ratio: 1; border: 0; background: #fff; color: #3762f5; font-size: clamp(1.25rem, 4vw, 2.2rem); font-weight: 700; }
+.cell:nth-child(3n) { border-right: 2px solid #152238; }
+.cell:nth-child(n+19):nth-child(-n+27), .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid #152238; }
+.cell:nth-child(9n) { border-right: 0; }
+.cell.given { color: #152238; background: #fbfcff; }
+.cell.peer { background: #eef4ff; }
+.cell.same-number { background: #dbe7ff; }
+.cell.selected { background: #bcd2ff; box-shadow: inset 0 0 0 3px #3d66ff; z-index: 2; }
+.cell.wrong { color: #e04444; background: #fff0f0; }
+.cell small { display: grid; grid-template-columns: repeat(3, 1fr); width: 80%; height: 80%; color: #697892; font-size: clamp(.45rem, 1.5vw, .8rem); font-weight: 800; font-style: normal; }
+.cell em { font-style: normal; display: grid; place-items: center; }
+.number-pad { display: grid; grid-template-columns: repeat(10, 1fr); gap: 10px; margin-top: 18px; }
+.number-pad button { padding: 16px 8px; background: #152238; color: white; font-size: 1.35rem; font-weight: 800; }
+.number-pad .erase { background: #edf1f7; color: #152238; font-size: 1rem; }
+@media (max-width: 880px) {
+  .hero, .game-panel { grid-template-columns: 1fr; display: grid; }
+  .new-game { justify-content: center; }
+  .number-pad { grid-template-columns: repeat(5, 1fr); }
+}
+@media (max-width: 520px) {
+  .app-shell { width: min(100% - 18px, 1180px); padding-top: 16px; }
+  .sidebar { order: 2; }
+  .board-wrap { padding: 8px; border-radius: 22px; }
+  .cell { font-size: 1.15rem; }
+}
+
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+const SIZE = 9;
+const BOX = 3;
+const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const STORAGE_KEY = 'sudoku-focus-state-v1';
+const LEVELS = {
+  uzman: { label: 'Uzman', holes: 54, subtitle: 'Sert ama akıcı' },
+  ekstrem: { label: 'Ekstrem', holes: 60, subtitle: 'Çok az ipucu' },
+  kabus: { label: 'Kâbus', holes: 64, subtitle: 'Sadece sabırlılara' },
+};
+const EMPTY = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+let state = loadState();
+
+function clone(board) { return board.map((row) => [...row]); }
+function notesGrid() { return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => [])); }
+function shuffle(values) {
+  const copy = [...values];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+function isSafe(board, row, col, value) {
+  for (let i = 0; i < SIZE; i += 1) if (board[row][i] === value || board[i][col] === value) return false;
+  const boxRow = Math.floor(row / BOX) * BOX;
+  const boxCol = Math.floor(col / BOX) * BOX;
+  for (let r = boxRow; r < boxRow + BOX; r += 1) for (let c = boxCol; c < boxCol + BOX; c += 1) if (board[r][c] === value) return false;
+  return true;
+}
+function fill(board) {
+  for (let r = 0; r < SIZE; r += 1) {
+    for (let c = 0; c < SIZE; c += 1) {
+      if (!board[r][c]) {
+        for (const value of shuffle(DIGITS)) {
+          if (isSafe(board, r, c, value)) {
+            board[r][c] = value;
+            if (fill(board)) return true;
+            board[r][c] = 0;
+          }
+        }
+        return false;
+      }
+    }
+  }
+  return true;
+}
+function generate(level) {
+  const solution = clone(EMPTY);
+  fill(solution);
+  const puzzle = clone(solution);
+  let removed = 0;
+  for (const cell of shuffle([...Array(81).keys()])) {
+    if (removed >= LEVELS[level].holes) break;
+    puzzle[Math.floor(cell / SIZE)][cell % SIZE] = 0;
+    removed += 1;
+  }
+  return { puzzle, solution };
+}
+function newState(level = 'uzman') {
+  const { puzzle, solution } = generate(level);
+  return { level, puzzle, solution, grid: clone(puzzle), notes: notesGrid(), selected: { row: 0, col: 0 }, noteMode: false, mistakes: 0, hints: 3, history: [] };
+}
+function loadState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (saved?.puzzle && saved?.solution && saved?.grid) return saved;
+  } catch { localStorage.removeItem(STORAGE_KEY); }
+  return newState();
+}
+function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function complete() { return state.grid.every((row, r) => row.every((value, c) => value === state.solution[r][c])); }
+function pushHistory() { state.history = [...state.history, { grid: clone(state.grid), notes: state.notes.map((row) => row.map((cell) => [...cell])), mistakes: state.mistakes, hints: state.hints }].slice(-40); }
+function select(row, col) { state.selected = { row, col }; render(); }
+function place(value) {
+  const { row, col } = state.selected;
+  if (state.puzzle[row][col] || complete()) return;
+  pushHistory();
+  if (state.noteMode) {
+    const set = new Set(state.notes[row][col]);
+    set.has(value) ? set.delete(value) : set.add(value);
+    state.notes[row][col] = [...set].sort((a, b) => a - b);
+  } else {
+    state.grid[row][col] = value;
+    state.notes[row][col] = [];
+    if (value !== state.solution[row][col]) state.mistakes += 1;
+  }
+  render();
+}
+function erase() {
+  const { row, col } = state.selected;
+  if (state.puzzle[row][col]) return;
+  pushHistory();
+  state.grid[row][col] = 0;
+  state.notes[row][col] = [];
+  render();
+}
+function undo() {
+  const last = state.history.pop();
+  if (!last) return;
+  state.grid = clone(last.grid);
+  state.notes = last.notes.map((row) => row.map((cell) => [...cell]));
+  state.mistakes = last.mistakes;
+  state.hints = last.hints;
+  render();
+}
+function hint() {
+  if (state.hints <= 0 || complete()) return;
+  let target = state.selected;
+  if (state.grid[target.row][target.col] === state.solution[target.row][target.col]) {
+    outer: for (let r = 0; r < SIZE; r += 1) for (let c = 0; c < SIZE; c += 1) if (state.grid[r][c] !== state.solution[r][c]) { target = { row: r, col: c }; break outer; }
+  }
+  pushHistory();
+  state.grid[target.row][target.col] = state.solution[target.row][target.col];
+  state.notes[target.row][target.col] = [];
+  state.selected = target;
+  state.hints -= 1;
+  render();
+}
+function restart(level = state.level) { state = newState(level); render(); }
+function cellClass(row, col, value) {
+  const selectedValue = state.grid[state.selected.row][state.selected.col];
+  const peer = state.selected.row === row || state.selected.col === col || (Math.floor(state.selected.row / BOX) === Math.floor(row / BOX) && Math.floor(state.selected.col / BOX) === Math.floor(col / BOX));
+  return ['cell', state.selected.row === row && state.selected.col === col && 'selected', peer && 'peer', selectedValue && selectedValue === value && 'same-number', state.puzzle[row][col] && 'given', value && value !== state.solution[row][col] && 'wrong'].filter(Boolean).join(' ');
+}
+function render() {
+  save();
+  const blanks = state.grid.flat().filter((cell) => !cell).length;
+  document.querySelector('#root').innerHTML = `
+    <main class="app-shell">
+      <section class="hero"><div><p class="eyebrow">Sudoku Focus</p><h1>Sade, hızlı ve gerçekten zor Sudoku.</h1><p class="intro">Not modu, akıllı vurgu, sınırlı ipucu ve yüksek zorluk seviyeleriyle kişisel antrenman alanın.</p></div><button class="new-game" data-action="new">↻ Yeni oyun</button></section>
+      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div><div class="tools"><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button></div>${complete() ? '<div class="win">🏆 Tebrikler, bu seviye çözüldü.</div>' : ''}</aside><div class="board-wrap"><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${state.notes[r][c].map((note) => `<em>${note}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div><div class="number-pad">${DIGITS.map((value) => `<button data-number="${value}">${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div></div></section>
+    </main>`;
+}
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('button');
+  if (!button) return;
+  if (button.dataset.row) select(Number(button.dataset.row), Number(button.dataset.col));
+  if (button.dataset.number) place(Number(button.dataset.number));
+  if (button.dataset.level) restart(button.dataset.level);
+  if (button.dataset.action === 'new') restart();
+  if (button.dataset.action === 'note') { state.noteMode = !state.noteMode; render(); }
+  if (button.dataset.action === 'hint') hint();
+  if (button.dataset.action === 'undo') undo();
+  if (button.dataset.action === 'erase') erase();
+});
+render();
+
+    </script>
+  </body>
+</html>
 
