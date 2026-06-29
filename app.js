@@ -3,9 +3,9 @@ const BOX = 3;
 const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const STORAGE_KEY = 'kirecte-trocki-state-v2';
 const LEVELS = {
-  uzman: { label: 'Uzman', holes: 54, subtitle: 'Sert ama akıcı' },
-  ekstrem: { label: 'Ekstrem', holes: 60, subtitle: 'Çok az ipucu' },
-  kabus: { label: 'Kâbus', holes: 64, subtitle: 'Sadece sabırlılara' },
+  uzman: { label: 'Uzman', holes: 46, subtitle: 'Mantıksal uzman' },
+  ekstrem: { label: 'Ekstrem', holes: 50, subtitle: 'Tek çözüm, zor mantık' },
+  kabus: { label: 'Kâbus', holes: 54, subtitle: 'Tahminsiz meydan okuma' },
 };
 const EMPTY = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
 let state = loadState();
@@ -45,17 +45,141 @@ function fill(board) {
   }
   return true;
 }
-function generate(level) {
-  const solution = clone(EMPTY);
-  fill(solution);
-  const puzzle = clone(solution);
-  let removed = 0;
-  for (const cell of shuffle([...Array(81).keys()])) {
-    if (removed >= LEVELS[level].holes) break;
-    puzzle[Math.floor(cell / SIZE)][cell % SIZE] = 0;
-    removed += 1;
+function boardCandidates(board, row, col) {
+  if (board[row][col]) return [];
+  return DIGITS.filter((value) => isSafe(board, row, col, value));
+}
+function countSolutions(board, limit = 2) {
+  let best = null;
+  let bestCandidates = null;
+  for (let row = 0; row < SIZE; row += 1) {
+    for (let col = 0; col < SIZE; col += 1) {
+      if (!board[row][col]) {
+        const candidates = boardCandidates(board, row, col);
+        if (!candidates.length) return 0;
+        if (!best || candidates.length < bestCandidates.length) {
+          best = { row, col };
+          bestCandidates = candidates;
+        }
+      }
+    }
   }
-  return { puzzle, solution };
+  if (!best) return 1;
+  let total = 0;
+  for (const value of bestCandidates) {
+    board[best.row][best.col] = value;
+    total += countSolutions(board, limit - total);
+    board[best.row][best.col] = 0;
+    if (total >= limit) return total;
+  }
+  return total;
+}
+function units() {
+  const list = [];
+  for (let i = 0; i < SIZE; i += 1) {
+    list.push(DIGITS.map((_, col) => [i, col]));
+    list.push(DIGITS.map((_, row) => [row, i]));
+  }
+  for (let boxRow = 0; boxRow < SIZE; boxRow += BOX) {
+    for (let boxCol = 0; boxCol < SIZE; boxCol += BOX) {
+      const unit = [];
+      for (let row = boxRow; row < boxRow + BOX; row += 1) for (let col = boxCol; col < boxCol + BOX; col += 1) unit.push([row, col]);
+      list.push(unit);
+    }
+  }
+  return list;
+}
+const ALL_UNITS = units();
+function candidateMap(board) {
+  return board.map((row, r) => row.map((value, c) => (value ? [] : boardCandidates(board, r, c))));
+}
+function placeLogical(board, row, col, value) {
+  if (!isSafe(board, row, col, value)) return false;
+  board[row][col] = value;
+  return true;
+}
+function applyNakedSingle(board) {
+  const candidates = candidateMap(board);
+  for (let row = 0; row < SIZE; row += 1) for (let col = 0; col < SIZE; col += 1) {
+    if (!board[row][col] && candidates[row][col].length === 1) return placeLogical(board, row, col, candidates[row][col][0]);
+  }
+  return false;
+}
+function applyHiddenSingle(board) {
+  const candidates = candidateMap(board);
+  for (const unit of ALL_UNITS) {
+    for (const value of DIGITS) {
+      const places = unit.filter(([row, col]) => !board[row][col] && candidates[row][col].includes(value));
+      if (places.length === 1) return placeLogical(board, places[0][0], places[0][1], value);
+    }
+  }
+  return false;
+}
+function applyNakedPair(board) {
+  const candidates = candidateMap(board);
+  for (const unit of ALL_UNITS) {
+    const pairs = unit.filter(([row, col]) => !board[row][col] && candidates[row][col].length === 2);
+    for (let a = 0; a < pairs.length; a += 1) {
+      for (let b = a + 1; b < pairs.length; b += 1) {
+        const first = candidates[pairs[a][0]][pairs[a][1]].join('');
+        const second = candidates[pairs[b][0]][pairs[b][1]].join('');
+        if (first !== second) continue;
+        for (const [row, col] of unit) {
+          if ((row === pairs[a][0] && col === pairs[a][1]) || (row === pairs[b][0] && col === pairs[b][1]) || board[row][col]) continue;
+          const remaining = candidates[row][col].filter((value) => !first.includes(String(value)));
+          if (remaining.length === 1) return placeLogical(board, row, col, remaining[0]);
+        }
+      }
+    }
+  }
+  return false;
+}
+function logicSolve(puzzle) {
+  const board = clone(puzzle);
+  let hardest = 'single';
+  let guard = 0;
+  while (!completeBoard(board) && guard < 200) {
+    guard += 1;
+    if (applyNakedSingle(board) || applyHiddenSingle(board)) continue;
+    if (applyNakedPair(board)) {
+      hardest = 'pair';
+      continue;
+    }
+    return { solved: false, hardest };
+  }
+  return { solved: completeBoard(board), hardest };
+}
+function completeBoard(board) {
+  return board.every((row) => row.every((value) => value !== 0));
+}
+function generate(level) {
+  const target = LEVELS[level].holes;
+  let best = null;
+  let bestRemoved = -1;
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const solution = clone(EMPTY);
+    fill(solution);
+    const puzzle = clone(solution);
+    let removed = 0;
+    for (const cell of shuffle([...Array(81).keys()])) {
+      if (removed >= target) break;
+      const row = Math.floor(cell / SIZE);
+      const col = cell % SIZE;
+      const previous = puzzle[row][col];
+      puzzle[row][col] = 0;
+      const unique = countSolutions(clone(puzzle), 2) === 1;
+      const logical = unique && logicSolve(puzzle).solved;
+      if (unique && logical) removed += 1;
+      else puzzle[row][col] = previous;
+    }
+    if (removed > bestRemoved) {
+      best = { puzzle: clone(puzzle), solution: clone(solution) };
+      bestRemoved = removed;
+    }
+    if (removed >= target) return { puzzle, solution };
+  }
+
+  return best;
 }
 function newState(level = 'uzman') {
   const { puzzle, solution } = generate(level);
@@ -169,9 +293,11 @@ document.addEventListener('click', (event) => {
 });
 try {
   render();
+  window.kirecteTrockiReady = true;
 } catch (error) {
   console.error('Kireçte Troçki başlatılamadı, kayıt sıfırlanıyor:', error);
   localStorage.removeItem(STORAGE_KEY);
   state = newState();
   render();
+  window.kirecteTrockiReady = true;
 }
