@@ -3,11 +3,11 @@ const BOX = 3;
 const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const STORAGE_KEY = 'kirecte-trocki-state-v2';
 const LEVELS = {
-  uzman: { label: 'Uzman', holes: 48, minScore: 620, subtitle: 'Mantıksal uzman' },
-  ekstrem: { label: 'Ekstrem', holes: 52, minScore: 1050, requireAdvanced: true, subtitle: 'Tek çözüm, zor mantık' },
-  kabus: { label: 'Kâbus', holes: 56, minScore: 1700, requireVeryAdvanced: true, subtitle: 'Tahminsiz meydan okuma' },
+  uzman: { label: 'Uzman', holes: 50, minScore: 900, subtitle: 'Mantıksal uzman' },
+  ekstrem: { label: 'Ekstrem', holes: 55, minScore: 1700, requireAdvanced: true, subtitle: 'Tek çözüm, zor mantık' },
+  kabus: { label: 'Kâbus', holes: 60, minScore: 3200, requireNightmare: true, subtitle: 'Tahminsiz meydan okuma' },
 };
-const TECHNIQUE_SCORE = { nakedSingle: 8, hiddenSingle: 22, nakedPair: 110, pointingPair: 160, boxLineReduction: 190, hiddenPair: 230, nakedTriple: 300, xWing: 420, swordfish: 620 };
+const TECHNIQUE_SCORE = { nakedSingle: 8, hiddenSingle: 22, nakedPair: 110, pointingPair: 160, boxLineReduction: 190, hiddenPair: 230, nakedTriple: 300, hiddenTriple: 360, xWing: 480, swordfish: 720, xyWing: 820 };
 const EMPTY = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
 function clone(board) { return board.map((row) => [...row]); }
 function notesGrid() { return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => [])); }
@@ -236,6 +236,23 @@ function applyNakedTriple(board) {
   }
   return null;
 }
+function applyHiddenTriple(board) {
+  const candidates = candidateMap(board);
+  for (const unit of ALL_UNITS) {
+    for (let a = 0; a < DIGITS.length; a += 1) for (let b = a + 1; b < DIGITS.length; b += 1) for (let c = b + 1; c < DIGITS.length; c += 1) {
+      const triple = [DIGITS[a], DIGITS[b], DIGITS[c]];
+      const cells = unit.filter(([row, col]) => !board[row][col] && candidates[row][col].some((value) => triple.includes(value)));
+      if (cells.length !== 3) continue;
+      if (!triple.every((value) => cells.some(([row, col]) => candidates[row][col].includes(value)))) continue;
+      for (const [row, col] of cells) {
+        const extras = candidates[row][col].filter((value) => !triple.includes(value));
+        const result = placeAfterCandidateRemoval(board, candidates, row, col, extras, 'hiddenTriple');
+        if (result) return result;
+      }
+    }
+  }
+  return null;
+}
 function applyXWing(board) {
   const candidates = candidateMap(board);
   for (const value of DIGITS) {
@@ -276,7 +293,46 @@ function applySwordfish(board) {
   }
   return null;
 }
-function emptyTechniqueStats() { return { nakedSingle: 0, hiddenSingle: 0, nakedPair: 0, pointingPair: 0, boxLineReduction: 0, hiddenPair: 0, nakedTriple: 0, xWing: 0, swordfish: 0 }; }
+function peers(row, col) {
+  const cells = new Set();
+  for (let i = 0; i < SIZE; i += 1) { cells.add(`${row},${i}`); cells.add(`${i},${col}`); }
+  const boxRow = Math.floor(row / BOX) * BOX;
+  const boxCol = Math.floor(col / BOX) * BOX;
+  for (let r = boxRow; r < boxRow + BOX; r += 1) for (let c = boxCol; c < boxCol + BOX; c += 1) cells.add(`${r},${c}`);
+  cells.delete(`${row},${col}`);
+  return [...cells].map((cell) => cell.split(',').map(Number));
+}
+function sees(a, b) {
+  return a[0] === b[0] || a[1] === b[1] || (Math.floor(a[0] / BOX) === Math.floor(b[0] / BOX) && Math.floor(a[1] / BOX) === Math.floor(b[1] / BOX));
+}
+function applyXYWing(board) {
+  const candidates = candidateMap(board);
+  const bivalueCells = [];
+  for (let row = 0; row < SIZE; row += 1) for (let col = 0; col < SIZE; col += 1) if (!board[row][col] && candidates[row][col].length === 2) bivalueCells.push([row, col]);
+  for (const pivot of bivalueCells) {
+    const [x, y] = candidates[pivot[0]][pivot[1]];
+    const wings = peers(pivot[0], pivot[1]).filter(([row, col]) => !board[row][col] && candidates[row][col].length === 2);
+    for (const wingA of wings) for (const wingB of wings) {
+      if (wingA[0] === wingB[0] && wingA[1] === wingB[1]) continue;
+      const candA = candidates[wingA[0]][wingA[1]];
+      const candB = candidates[wingB[0]][wingB[1]];
+      const z = DIGITS.find((value) => value !== x && value !== y && candA.includes(value) && candB.includes(value));
+      if (!z) continue;
+      const validA = (candA.includes(x) && candA.includes(z) && !candA.includes(y)) || (candA.includes(y) && candA.includes(z) && !candA.includes(x));
+      const validB = (candB.includes(x) && candB.includes(z) && !candB.includes(y)) || (candB.includes(y) && candB.includes(z) && !candB.includes(x));
+      if (!validA || !validB || candA.join('') === candB.join('') || sees(wingA, wingB)) continue;
+      for (let row = 0; row < SIZE; row += 1) for (let col = 0; col < SIZE; col += 1) {
+        if (board[row][col] || !candidates[row][col].includes(z)) continue;
+        if (sees([row, col], wingA) && sees([row, col], wingB)) {
+          const result = placeAfterCandidateRemoval(board, candidates, row, col, [z], 'xyWing');
+          if (result) return result;
+        }
+      }
+    }
+  }
+  return null;
+}
+function emptyTechniqueStats() { return { nakedSingle: 0, hiddenSingle: 0, nakedPair: 0, pointingPair: 0, boxLineReduction: 0, hiddenPair: 0, nakedTriple: 0, hiddenTriple: 0, xWing: 0, swordfish: 0, xyWing: 0 }; }
 function rateTechniqueStats(techniques) {
   return Object.entries(techniques).reduce((total, [technique, count]) => total + (TECHNIQUE_SCORE[technique] || 0) * count, 0);
 }
@@ -287,7 +343,7 @@ function logicSolve(puzzle) {
   let guard = 0;
   while (!completeBoard(board) && guard < 240) {
     guard += 1;
-    const technique = applyNakedSingle(board) || applyHiddenSingle(board) || applyNakedPair(board) || applyPointingPair(board) || applyBoxLineReduction(board) || applyHiddenPair(board) || applyNakedTriple(board) || applyXWing(board) || applySwordfish(board);
+    const technique = applyNakedSingle(board) || applyHiddenSingle(board) || applyNakedPair(board) || applyPointingPair(board) || applyBoxLineReduction(board) || applyHiddenPair(board) || applyNakedTriple(board) || applyHiddenTriple(board) || applyXWing(board) || applySwordfish(board) || applyXYWing(board);
     if (technique) {
       techniques[technique] += 1;
       if (TECHNIQUE_SCORE[technique] >= (TECHNIQUE_SCORE[hardest] || 0)) hardest = technique;
@@ -303,8 +359,8 @@ function completeBoard(board) {
 function meetsDifficulty(level, rating) {
   const config = LEVELS[level];
   return rating.score >= config.minScore
-    && (!config.requireAdvanced || rating.techniques.pointingPair > 0 || rating.techniques.boxLineReduction > 0 || rating.techniques.hiddenPair > 0 || rating.techniques.nakedTriple > 0 || rating.techniques.xWing > 0 || rating.techniques.swordfish > 0)
-    && (!config.requireVeryAdvanced || rating.techniques.nakedTriple > 0 || rating.techniques.xWing > 0 || rating.techniques.swordfish > 0);
+    && (!config.requireAdvanced || rating.techniques.pointingPair > 0 || rating.techniques.boxLineReduction > 0 || rating.techniques.hiddenPair > 0 || rating.techniques.nakedTriple > 0 || rating.techniques.hiddenTriple > 0 || rating.techniques.xWing > 0 || rating.techniques.swordfish > 0 || rating.techniques.xyWing > 0)
+    && (!config.requireNightmare || rating.techniques.hiddenTriple > 0 || rating.techniques.xWing > 0 || rating.techniques.swordfish > 0 || rating.techniques.xyWing > 0);
 }
 function betterPuzzle(candidate, current) {
   if (!current) return true;
@@ -314,7 +370,8 @@ function betterPuzzle(candidate, current) {
 function generate(level) {
   const target = LEVELS[level].holes;
   let best = null;
-  for (let attempt = 0; attempt < 32; attempt += 1) {
+  const maxAttempts = level === 'kabus' ? 96 : 48;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const solution = clone(EMPTY);
     fill(solution);
     const puzzle = clone(solution);
