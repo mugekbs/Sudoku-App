@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sudoku Focus</title>
+    <title>Kireçte Troçki</title>
     <style>
 :root {
   color: #152238;
@@ -15,8 +15,9 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 button { font: inherit; }
 .app-shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 48px; }
-.hero { display: flex; justify-content: space-between; gap: 24px; align-items: center; margin-bottom: 28px; }
-.eyebrow { color: #3d66ff; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 8px; }
+.hero { display: flex; justify-content: space-between; gap: 24px; align-items: center; margin-bottom: 18px; }
+.hero.compact { padding-top: 8px; }
+.eyebrow { color: #111827; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; margin: 0; font-size: clamp(1.35rem, 4vw, 2.4rem); }
 h1 { font-size: clamp(2rem, 5vw, 4.2rem); line-height: 0.95; margin: 0; max-width: 720px; }
 .intro { color: #5f6d82; font-size: 1.08rem; max-width: 620px; }
 .new-game, .tools button, .level, .number-pad button { border: 0; cursor: pointer; border-radius: 18px; transition: transform .15s ease, box-shadow .15s ease, background .15s ease; }
@@ -30,14 +31,17 @@ button:active { transform: scale(.98); }
 .level strong, .level span { display: block; }
 .level span { color: #75839a; font-size: .9rem; margin-top: 4px; }
 .level.active { background: #eef3ff; border-color: #3d66ff; }
-.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0; }
+.stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 18px 0; }
 .stats span { background: #f8f9fc; border-radius: 18px; padding: 12px; color: #6b7688; font-size: .9rem; }
 .stats strong { display: block; color: #152238; font-size: 1.3rem; }
 .tools { display: grid; gap: 10px; }
 .tools button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; background: #edf1f7; color: #152238; }
 .tools .active-tool { background: #ffeab6; }
 .win { margin-top: 16px; display: flex; align-items: center; gap: 8px; background: #e9f9ef; color: #176a35; padding: 14px; border-radius: 18px; font-weight: 700; }
-.board-wrap { padding: clamp(14px, 3vw, 28px); }
+.board-wrap { padding: clamp(14px, 3vw, 28px); overflow: hidden; }
+.catwalk { position: relative; height: 46px; margin: -4px 4px 8px; border-bottom: 3px solid #111827; }
+.cat { position: absolute; left: -48px; bottom: -2px; display: inline-block; font-size: 2.2rem; filter: grayscale(1) contrast(1.4) brightness(.25); animation: cat-walk 8s linear infinite; }
+@keyframes cat-walk { from { transform: translateX(-12px) scaleX(1); } 49% { transform: translateX(calc(100vw - 180px)) scaleX(1); } 50% { transform: translateX(calc(100vw - 180px)) scaleX(-1); } 99% { transform: translateX(-12px) scaleX(-1); } to { transform: translateX(-12px) scaleX(1); } }
 .board { aspect-ratio: 1; display: grid; grid-template-columns: repeat(9, 1fr); border: 3px solid #152238; border-radius: 18px; overflow: hidden; background: #152238; gap: 1px; }
 .cell { position: relative; display: grid; place-items: center; min-width: 0; aspect-ratio: 1; border: 0; background: #fff; color: #3762f5; font-size: clamp(1.25rem, 4vw, 2.2rem); font-weight: 700; }
 .cell:nth-child(3n) { border-right: 2px solid #152238; }
@@ -81,6 +85,7 @@ const LEVELS = {
 };
 const EMPTY = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
 let state = loadState();
+let timerId = window.setInterval(tick, 1000);
 
 function clone(board) { return board.map((row) => [...row]); }
 function notesGrid() { return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => [])); }
@@ -130,7 +135,7 @@ function generate(level) {
 }
 function newState(level = 'uzman') {
   const { puzzle, solution } = generate(level);
-  return { level, puzzle, solution, grid: clone(puzzle), notes: notesGrid(), selected: { row: 0, col: 0 }, noteMode: false, mistakes: 0, hints: 3, history: [] };
+  return { level, puzzle, solution, grid: clone(puzzle), notes: notesGrid(), selected: { row: 0, col: 0 }, noteMode: false, mistakes: 0, hints: 3, elapsed: 0, history: [] };
 }
 function loadState() {
   try {
@@ -140,8 +145,20 @@ function loadState() {
   return newState();
 }
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function formatTime(seconds) {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const rest = (seconds % 60).toString().padStart(2, '0');
+  return `${minutes}:${rest}`;
+}
+function tick() {
+  if (complete()) return;
+  state.elapsed = (state.elapsed || 0) + 1;
+  save();
+  const timer = document.querySelector('[data-timer]');
+  if (timer) timer.textContent = formatTime(state.elapsed);
+}
 function complete() { return state.grid.every((row, r) => row.every((value, c) => value === state.solution[r][c])); }
-function pushHistory() { state.history = [...state.history, { grid: clone(state.grid), notes: state.notes.map((row) => row.map((cell) => [...cell])), mistakes: state.mistakes, hints: state.hints }].slice(-40); }
+function pushHistory() { state.history = [...state.history, { grid: clone(state.grid), notes: state.notes.map((row) => row.map((cell) => [...cell])), mistakes: state.mistakes, hints: state.hints, elapsed: state.elapsed || 0 }].slice(-40); }
 function select(row, col) { state.selected = { row, col }; render(); }
 function place(value) {
   const { row, col } = state.selected;
@@ -173,6 +190,7 @@ function undo() {
   state.notes = last.notes.map((row) => row.map((cell) => [...cell]));
   state.mistakes = last.mistakes;
   state.hints = last.hints;
+  state.elapsed = last.elapsed ?? state.elapsed;
   render();
 }
 function hint() {
@@ -199,8 +217,8 @@ function render() {
   const blanks = state.grid.flat().filter((cell) => !cell).length;
   document.querySelector('#root').innerHTML = `
     <main class="app-shell">
-      <section class="hero"><div><p class="eyebrow">Sudoku Focus</p><h1>Sade, hızlı ve gerçekten zor Sudoku.</h1><p class="intro">Not modu, akıllı vurgu, sınırlı ipucu ve yüksek zorluk seviyeleriyle kişisel antrenman alanın.</p></div><button class="new-game" data-action="new">↻ Yeni oyun</button></section>
-      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div><div class="tools"><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button></div>${complete() ? '<div class="win">🏆 Tebrikler, bu seviye çözüldü.</div>' : ''}</aside><div class="board-wrap"><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${state.notes[r][c].map((note) => `<em>${note}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div><div class="number-pad">${DIGITS.map((value) => `<button data-number="${value}">${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div></div></section>
+      <section class="hero compact"><div><p class="eyebrow">Kireçte Troçki</p></div><button class="new-game" data-action="new">↻ Yeni oyun</button></section>
+      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div><div class="tools"><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button></div>${complete() ? '<div class="win">🏆 Tebrikler, bu seviye çözüldü.</div>' : ''}</aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${state.notes[r][c].map((note) => `<em>${note}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div><div class="number-pad">${DIGITS.map((value) => `<button data-number="${value}">${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div></div></section>
     </main>`;
 }
 document.addEventListener('click', (event) => {
@@ -220,4 +238,3 @@ render();
     </script>
   </body>
 </html>
-
