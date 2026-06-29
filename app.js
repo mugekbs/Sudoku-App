@@ -5,9 +5,9 @@ const STORAGE_KEY = 'kirecte-trocki-state-v2';
 const LEVELS = {
   uzman: { label: 'Uzman', holes: 46, minScore: 420, subtitle: 'Mantıksal uzman' },
   ekstrem: { label: 'Ekstrem', holes: 50, minScore: 760, subtitle: 'Tek çözüm, zor mantık' },
-  kabus: { label: 'Kâbus', holes: 54, minScore: 1100, requirePair: true, subtitle: 'Tahminsiz meydan okuma' },
+  kabus: { label: 'Kâbus', holes: 54, minScore: 1300, requireAdvanced: true, subtitle: 'Tahminsiz meydan okuma' },
 };
-const TECHNIQUE_SCORE = { nakedSingle: 8, hiddenSingle: 22, nakedPair: 110 };
+const TECHNIQUE_SCORE = { nakedSingle: 8, hiddenSingle: 22, nakedPair: 110, pointingPair: 160, boxLineReduction: 190, hiddenPair: 230, xWing: 420 };
 const EMPTY = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
 function clone(board) { return board.map((row) => [...row]); }
 function notesGrid() { return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => [])); }
@@ -113,6 +113,12 @@ function applyHiddenSingle(board) {
   }
   return null;
 }
+function placeAfterCandidateRemoval(board, candidates, row, col, removeValues, technique) {
+  if (board[row][col]) return null;
+  const reduced = candidates[row][col].filter((value) => !removeValues.includes(value));
+  if (reduced.length === 1 && reduced.length < candidates[row][col].length && placeLogical(board, row, col, reduced[0])) return technique;
+  return null;
+}
 function applyNakedPair(board) {
   const candidates = candidateMap(board);
   for (const unit of ALL_UNITS) {
@@ -132,7 +138,107 @@ function applyNakedPair(board) {
   }
   return null;
 }
-function emptyTechniqueStats() { return { nakedSingle: 0, hiddenSingle: 0, nakedPair: 0 }; }
+function applyPointingPair(board) {
+  const candidates = candidateMap(board);
+  for (let boxRow = 0; boxRow < SIZE; boxRow += BOX) {
+    for (let boxCol = 0; boxCol < SIZE; boxCol += BOX) {
+      const boxCells = [];
+      for (let row = boxRow; row < boxRow + BOX; row += 1) for (let col = boxCol; col < boxCol + BOX; col += 1) boxCells.push([row, col]);
+      for (const value of DIGITS) {
+        const places = boxCells.filter(([row, col]) => !board[row][col] && candidates[row][col].includes(value));
+        if (places.length < 2) continue;
+        const sameRow = places.every(([row]) => row === places[0][0]);
+        const sameCol = places.every(([, col]) => col === places[0][1]);
+        if (sameRow) {
+          const row = places[0][0];
+          for (let col = 0; col < SIZE; col += 1) {
+            if (col >= boxCol && col < boxCol + BOX) continue;
+            const result = placeAfterCandidateRemoval(board, candidates, row, col, [value], 'pointingPair');
+            if (result) return result;
+          }
+        }
+        if (sameCol) {
+          const col = places[0][1];
+          for (let row = 0; row < SIZE; row += 1) {
+            if (row >= boxRow && row < boxRow + BOX) continue;
+            const result = placeAfterCandidateRemoval(board, candidates, row, col, [value], 'pointingPair');
+            if (result) return result;
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+function applyBoxLineReduction(board) {
+  const candidates = candidateMap(board);
+  for (const value of DIGITS) {
+    for (let row = 0; row < SIZE; row += 1) {
+      const cols = DIGITS.map((_, col) => col).filter((col) => !board[row][col] && candidates[row][col].includes(value));
+      if (cols.length > 1 && cols.every((col) => Math.floor(col / BOX) === Math.floor(cols[0] / BOX))) {
+        const boxRow = Math.floor(row / BOX) * BOX;
+        const boxCol = Math.floor(cols[0] / BOX) * BOX;
+        for (let r = boxRow; r < boxRow + BOX; r += 1) for (let c = boxCol; c < boxCol + BOX; c += 1) {
+          if (r === row) continue;
+          const result = placeAfterCandidateRemoval(board, candidates, r, c, [value], 'boxLineReduction');
+          if (result) return result;
+        }
+      }
+    }
+    for (let col = 0; col < SIZE; col += 1) {
+      const rows = DIGITS.map((_, row) => row).filter((row) => !board[row][col] && candidates[row][col].includes(value));
+      if (rows.length > 1 && rows.every((row) => Math.floor(row / BOX) === Math.floor(rows[0] / BOX))) {
+        const boxRow = Math.floor(rows[0] / BOX) * BOX;
+        const boxCol = Math.floor(col / BOX) * BOX;
+        for (let r = boxRow; r < boxRow + BOX; r += 1) for (let c = boxCol; c < boxCol + BOX; c += 1) {
+          if (c === col) continue;
+          const result = placeAfterCandidateRemoval(board, candidates, r, c, [value], 'boxLineReduction');
+          if (result) return result;
+        }
+      }
+    }
+  }
+  return null;
+}
+function applyHiddenPair(board) {
+  const candidates = candidateMap(board);
+  for (const unit of ALL_UNITS) {
+    for (let a = 0; a < DIGITS.length; a += 1) for (let b = a + 1; b < DIGITS.length; b += 1) {
+      const pair = [DIGITS[a], DIGITS[b]];
+      const cellsA = unit.filter(([row, col]) => !board[row][col] && candidates[row][col].includes(pair[0]));
+      const cellsB = unit.filter(([row, col]) => !board[row][col] && candidates[row][col].includes(pair[1]));
+      if (cellsA.length !== 2 || cellsB.length !== 2) continue;
+      const sameCells = cellsA.every(([row, col]) => cellsB.some(([r, c]) => r === row && c === col));
+      if (!sameCells) continue;
+      for (const [row, col] of cellsA) {
+        const extras = candidates[row][col].filter((value) => !pair.includes(value));
+        const result = placeAfterCandidateRemoval(board, candidates, row, col, extras, 'hiddenPair');
+        if (result) return result;
+      }
+    }
+  }
+  return null;
+}
+function applyXWing(board) {
+  const candidates = candidateMap(board);
+  for (const value of DIGITS) {
+    const rowPatterns = [];
+    for (let row = 0; row < SIZE; row += 1) {
+      const cols = DIGITS.map((_, col) => col).filter((col) => !board[row][col] && candidates[row][col].includes(value));
+      if (cols.length === 2) rowPatterns.push({ row, cols: cols.join(',') });
+    }
+    for (let a = 0; a < rowPatterns.length; a += 1) for (let b = a + 1; b < rowPatterns.length; b += 1) {
+      if (rowPatterns[a].cols !== rowPatterns[b].cols) continue;
+      for (const col of rowPatterns[a].cols.split(',').map(Number)) for (let row = 0; row < SIZE; row += 1) {
+        if (row === rowPatterns[a].row || row === rowPatterns[b].row) continue;
+        const result = placeAfterCandidateRemoval(board, candidates, row, col, [value], 'xWing');
+        if (result) return result;
+      }
+    }
+  }
+  return null;
+}
+function emptyTechniqueStats() { return { nakedSingle: 0, hiddenSingle: 0, nakedPair: 0, pointingPair: 0, boxLineReduction: 0, hiddenPair: 0, xWing: 0 }; }
 function rateTechniqueStats(techniques) {
   return Object.entries(techniques).reduce((total, [technique, count]) => total + (TECHNIQUE_SCORE[technique] || 0) * count, 0);
 }
@@ -143,7 +249,7 @@ function logicSolve(puzzle) {
   let guard = 0;
   while (!completeBoard(board) && guard < 240) {
     guard += 1;
-    const technique = applyNakedSingle(board) || applyHiddenSingle(board) || applyNakedPair(board);
+    const technique = applyNakedSingle(board) || applyHiddenSingle(board) || applyNakedPair(board) || applyPointingPair(board) || applyBoxLineReduction(board) || applyHiddenPair(board) || applyXWing(board);
     if (technique) {
       techniques[technique] += 1;
       if (TECHNIQUE_SCORE[technique] >= (TECHNIQUE_SCORE[hardest] || 0)) hardest = technique;
@@ -158,7 +264,7 @@ function completeBoard(board) {
 }
 function meetsDifficulty(level, rating) {
   const config = LEVELS[level];
-  return rating.score >= config.minScore && (!config.requirePair || rating.techniques.nakedPair > 0);
+  return rating.score >= config.minScore && (!config.requireAdvanced || rating.techniques.pointingPair > 0 || rating.techniques.boxLineReduction > 0 || rating.techniques.hiddenPair > 0 || rating.techniques.xWing > 0);
 }
 function betterPuzzle(candidate, current) {
   if (!current) return true;
@@ -287,7 +393,7 @@ function render() {
   document.querySelector('#root').innerHTML = `
     <main class="app-shell">
       <section class="hero compact"><div><p class="eyebrow">Kireçte Troçki</p></div><button class="new-game" data-action="new">↻ Yeni oyun</button></section>
-      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Skor <strong>${state.rating?.score || 0}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span><span>Teknik <strong>${state.rating?.hardest || 'single'}</strong></span></div><div class="tools"><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button></div>${complete() ? '<div class="win">🏆 Tebrikler, bu seviye çözüldü.</div>' : ''}</aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${state.notes[r][c].map((note) => `<em>${note}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div><div class="number-pad">${DIGITS.map((value) => `<button data-number="${value}">${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div></div></section>
+      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div><div class="tools"><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button></div>${complete() ? '<div class="win">🏆 Tebrikler, bu seviye çözüldü.</div>' : ''}</aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${state.notes[r][c].map((note) => `<em>${note}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div><div class="number-pad">${DIGITS.map((value) => `<button data-number="${value}">${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div></div></section>
     </main>`;
 }
 let state = loadState();
