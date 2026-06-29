@@ -4,10 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kireçte Troçki</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=4" />
   </head>
   <body>
     <div id="root">Kireçte Troçki yükleniyor…</div>
-    <script src="app.js" defer></script>
+    <script>
+      window.setTimeout(() => {
+        if (!window.kirecteTrockiReady) {
+          document.getElementById("root").textContent = "Uygulama dosyası yüklenemedi. GitHub’da app.js dosyasının repo kökünde olduğundan emin ol.";
+        }
+      }, 4000);
+    </script>
+    <script src="/app.js?v=4" defer></script>
   </body>
 </html>
