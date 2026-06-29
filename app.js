@@ -3,14 +3,12 @@ const BOX = 3;
 const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const STORAGE_KEY = 'kirecte-trocki-state-v2';
 const LEVELS = {
-  uzman: { label: 'Uzman', holes: 46, subtitle: 'Mantıksal uzman' },
-  ekstrem: { label: 'Ekstrem', holes: 50, subtitle: 'Tek çözüm, zor mantık' },
-  kabus: { label: 'Kâbus', holes: 54, subtitle: 'Tahminsiz meydan okuma' },
+  uzman: { label: 'Uzman', holes: 46, minScore: 420, subtitle: 'Mantıksal uzman' },
+  ekstrem: { label: 'Ekstrem', holes: 50, minScore: 760, subtitle: 'Tek çözüm, zor mantık' },
+  kabus: { label: 'Kâbus', holes: 54, minScore: 1100, requirePair: true, subtitle: 'Tahminsiz meydan okuma' },
 };
+const TECHNIQUE_SCORE = { nakedSingle: 8, hiddenSingle: 22, nakedPair: 110 };
 const EMPTY = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
-let state = loadState();
-let timerId = window.setInterval(tick, 1000);
-
 function clone(board) { return board.map((row) => [...row]); }
 function notesGrid() { return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => [])); }
 function shuffle(values) {
@@ -101,19 +99,19 @@ function placeLogical(board, row, col, value) {
 function applyNakedSingle(board) {
   const candidates = candidateMap(board);
   for (let row = 0; row < SIZE; row += 1) for (let col = 0; col < SIZE; col += 1) {
-    if (!board[row][col] && candidates[row][col].length === 1) return placeLogical(board, row, col, candidates[row][col][0]);
+    if (!board[row][col] && candidates[row][col].length === 1 && placeLogical(board, row, col, candidates[row][col][0])) return 'nakedSingle';
   }
-  return false;
+  return null;
 }
 function applyHiddenSingle(board) {
   const candidates = candidateMap(board);
   for (const unit of ALL_UNITS) {
     for (const value of DIGITS) {
       const places = unit.filter(([row, col]) => !board[row][col] && candidates[row][col].includes(value));
-      if (places.length === 1) return placeLogical(board, places[0][0], places[0][1], value);
+      if (places.length === 1 && placeLogical(board, places[0][0], places[0][1], value)) return 'hiddenSingle';
     }
   }
-  return false;
+  return null;
 }
 function applyNakedPair(board) {
   const candidates = candidateMap(board);
@@ -127,35 +125,49 @@ function applyNakedPair(board) {
         for (const [row, col] of unit) {
           if ((row === pairs[a][0] && col === pairs[a][1]) || (row === pairs[b][0] && col === pairs[b][1]) || board[row][col]) continue;
           const remaining = candidates[row][col].filter((value) => !first.includes(String(value)));
-          if (remaining.length === 1) return placeLogical(board, row, col, remaining[0]);
+          if (remaining.length === 1 && placeLogical(board, row, col, remaining[0])) return 'nakedPair';
         }
       }
     }
   }
-  return false;
+  return null;
+}
+function emptyTechniqueStats() { return { nakedSingle: 0, hiddenSingle: 0, nakedPair: 0 }; }
+function rateTechniqueStats(techniques) {
+  return Object.entries(techniques).reduce((total, [technique, count]) => total + (TECHNIQUE_SCORE[technique] || 0) * count, 0);
 }
 function logicSolve(puzzle) {
   const board = clone(puzzle);
-  let hardest = 'single';
+  const techniques = emptyTechniqueStats();
+  let hardest = 'none';
   let guard = 0;
-  while (!completeBoard(board) && guard < 200) {
+  while (!completeBoard(board) && guard < 240) {
     guard += 1;
-    if (applyNakedSingle(board) || applyHiddenSingle(board)) continue;
-    if (applyNakedPair(board)) {
-      hardest = 'pair';
+    const technique = applyNakedSingle(board) || applyHiddenSingle(board) || applyNakedPair(board);
+    if (technique) {
+      techniques[technique] += 1;
+      if (TECHNIQUE_SCORE[technique] >= (TECHNIQUE_SCORE[hardest] || 0)) hardest = technique;
       continue;
     }
-    return { solved: false, hardest };
+    return { solved: false, hardest, score: rateTechniqueStats(techniques), techniques };
   }
-  return { solved: completeBoard(board), hardest };
+  return { solved: completeBoard(board), hardest, score: rateTechniqueStats(techniques), techniques };
 }
 function completeBoard(board) {
   return board.every((row) => row.every((value) => value !== 0));
 }
+function meetsDifficulty(level, rating) {
+  const config = LEVELS[level];
+  return rating.score >= config.minScore && (!config.requirePair || rating.techniques.nakedPair > 0);
+}
+function betterPuzzle(candidate, current) {
+  if (!current) return true;
+  if (candidate.rating.score !== current.rating.score) return candidate.rating.score > current.rating.score;
+  return candidate.removed > current.removed;
+}
 function generate(level) {
   const target = LEVELS[level].holes;
   let best = null;
-  let bestRemoved = -1;
   for (let attempt = 0; attempt < 24; attempt += 1) {
     const solution = clone(EMPTY);
     fill(solution);
@@ -168,22 +180,21 @@ function generate(level) {
       const previous = puzzle[row][col];
       puzzle[row][col] = 0;
       const unique = countSolutions(clone(puzzle), 2) === 1;
-      const logical = unique && logicSolve(puzzle).solved;
-      if (unique && logical) removed += 1;
+      const rating = unique ? logicSolve(puzzle) : { solved: false, score: 0, techniques: emptyTechniqueStats(), hardest: 'none' };
+      if (unique && rating.solved) removed += 1;
       else puzzle[row][col] = previous;
     }
-    if (removed > bestRemoved) {
-      best = { puzzle: clone(puzzle), solution: clone(solution) };
-      bestRemoved = removed;
-    }
-    if (removed >= target) return { puzzle, solution };
+    const rating = logicSolve(puzzle);
+    const candidate = { puzzle: clone(puzzle), solution: clone(solution), rating, removed };
+    if (betterPuzzle(candidate, best)) best = candidate;
+    if (removed >= target && meetsDifficulty(level, rating)) return { puzzle, solution, rating };
   }
 
   return best;
 }
 function newState(level = 'uzman') {
-  const { puzzle, solution } = generate(level);
-  return { level, puzzle, solution, grid: clone(puzzle), notes: notesGrid(), selected: { row: 0, col: 0 }, noteMode: false, mistakes: 0, hints: 3, elapsed: 0, history: [] };
+  const { puzzle, solution, rating } = generate(level);
+  return { level, puzzle, solution, rating, grid: clone(puzzle), notes: notesGrid(), selected: { row: 0, col: 0 }, noteMode: false, mistakes: 0, hints: 3, elapsed: 0, history: [] };
 }
 function isValidSavedState(saved) {
   return saved?.puzzle?.length === SIZE
@@ -196,7 +207,7 @@ function isValidSavedState(saved) {
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (isValidSavedState(saved)) return { ...saved, elapsed: saved.elapsed || 0, history: saved.history || [] };
+    if (isValidSavedState(saved)) return { ...saved, rating: saved.rating || logicSolve(saved.puzzle), elapsed: saved.elapsed || 0, history: saved.history || [] };
   } catch {
     localStorage.removeItem(STORAGE_KEY);
   }
@@ -276,9 +287,12 @@ function render() {
   document.querySelector('#root').innerHTML = `
     <main class="app-shell">
       <section class="hero compact"><div><p class="eyebrow">Kireçte Troçki</p></div><button class="new-game" data-action="new">↻ Yeni oyun</button></section>
-      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div><div class="tools"><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button></div>${complete() ? '<div class="win">🏆 Tebrikler, bu seviye çözüldü.</div>' : ''}</aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${state.notes[r][c].map((note) => `<em>${note}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div><div class="number-pad">${DIGITS.map((value) => `<button data-number="${value}">${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div></div></section>
+      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Skor <strong>${state.rating?.score || 0}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span><span>Teknik <strong>${state.rating?.hardest || 'single'}</strong></span></div><div class="tools"><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button></div>${complete() ? '<div class="win">🏆 Tebrikler, bu seviye çözüldü.</div>' : ''}</aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${state.notes[r][c].map((note) => `<em>${note}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div><div class="number-pad">${DIGITS.map((value) => `<button data-number="${value}">${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div></div></section>
     </main>`;
 }
+let state = loadState();
+let timerId = window.setInterval(tick, 1000);
+
 document.addEventListener('click', (event) => {
   const button = event.target.closest('button');
   if (!button) return;
