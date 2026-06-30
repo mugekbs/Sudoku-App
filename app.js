@@ -2,6 +2,7 @@ const SIZE = 9;
 const BOX = 3;
 const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const STORAGE_KEY = 'kirecte-trocki-state-v2';
+const NYT_HARD_SUDOKU_URL = 'https://www.nytimes.com/puzzles/sudoku/hard';
 const LEVELS = {
   uzman: { label: 'Uzman', holes: 50, minScore: 900, subtitle: 'Mantıksal uzman' },
   ekstrem: { label: 'Ekstrem', holes: 55, minScore: 1700, requireAdvanced: true, subtitle: 'Tek çözüm, zor mantık' },
@@ -437,6 +438,9 @@ function moveSelection(rowDelta, colDelta) {
   const nextCol = (state.selected.col + colDelta + SIZE) % SIZE;
   select(nextRow, nextCol);
 }
+function openNytHardSudoku() {
+  window.open(NYT_HARD_SUDOKU_URL, '_blank', 'noopener,noreferrer');
+}
 function formatTime(seconds) {
   const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
   const rest = (seconds % 60).toString().padStart(2, '0');
@@ -511,7 +515,7 @@ function render() {
   document.querySelector('#root').innerHTML = `
     <main class="app-shell">
       <section class="hero compact"><div><p class="eyebrow">Kireçte Troçki</p></div><button class="new-game" data-action="new">↻ Yeni oyun</button></section>
-      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div><div class="tools"><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button><button data-action="auto-candidates">☷ Auto-candidate</button></div>${complete() ? '<div class="win">🏆 Tebrikler, bu seviye çözüldü.</div>' : ''}</aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${state.notes[r][c].map((note) => `<em>${note}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div><div class="number-pad">${DIGITS.map((value) => `<button data-number="${value}">${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div></div></section>
+      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div><div class="tools"><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button><button data-action="auto-candidates">☷ Auto-candidate</button><button data-action="nyt-hard">NYT Hard ↗</button></div>${complete() ? '<div class="win">🏆 Tebrikler, bu seviye çözüldü.</div>' : ''}</aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${state.notes[r][c].map((note) => `<em>${note}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div><div class="number-pad">${DIGITS.map((value) => `<button data-number="${value}">${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div></div></section>
     </main>`;
 }
 let state = loadState();
@@ -529,6 +533,7 @@ document.addEventListener('click', (event) => {
   if (button.dataset.action === 'undo') undo();
   if (button.dataset.action === 'erase') erase();
   if (button.dataset.action === 'auto-candidates') fillAutoCandidates();
+  if (button.dataset.action === 'nyt-hard') openNytHardSudoku();
 });
 document.addEventListener('keydown', (event) => {
   if (event.metaKey || event.ctrlKey || event.altKey) return;
