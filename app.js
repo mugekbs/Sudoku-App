@@ -12,6 +12,7 @@ const TECHNIQUE_SCORE = { nakedSingle: 8, hiddenSingle: 22, nakedPair: 110, poin
 const EMPTY = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
 function clone(board) { return board.map((row) => [...row]); }
 function notesGrid() { return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => [])); }
+function cloneNotes(notes) { return notes.map((row) => row.map((cell) => [...cell])); }
 function shuffle(values) {
   const copy = [...values];
   for (let i = copy.length - 1; i > 0; i -= 1) {
@@ -398,7 +399,7 @@ function generate(level) {
 }
 function newState(level = 'uzman') {
   const { puzzle, solution, rating } = generate(level);
-  return { level, puzzle, solution, rating, grid: clone(puzzle), notes: notesGrid(), selected: { row: 0, col: 0 }, noteMode: false, mistakes: 0, hints: 3, elapsed: 0, history: [] };
+  return { level, puzzle, solution, rating, grid: clone(puzzle), notes: notesGrid(), autoCandidates: false, autoCandidateSnapshot: null, selected: { row: 0, col: 0 }, noteMode: false, mistakes: 0, hints: 3, elapsed: 0, history: [] };
 }
 function isValidSavedState(saved) {
   return saved?.puzzle?.length === SIZE
@@ -411,7 +412,7 @@ function isValidSavedState(saved) {
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (isValidSavedState(saved)) return { ...saved, rating: saved.rating || logicSolve(saved.puzzle), elapsed: saved.elapsed || 0, history: saved.history || [] };
+    if (isValidSavedState(saved)) return { ...saved, rating: saved.rating || logicSolve(saved.puzzle), elapsed: saved.elapsed || 0, history: saved.history || [], autoCandidates: saved.autoCandidates || false, autoCandidateSnapshot: saved.autoCandidateSnapshot || null };
   } catch {
     localStorage.removeItem(STORAGE_KEY);
   }
@@ -424,13 +425,27 @@ function cleanRelatedNotes(row, col, value) {
     if (index !== row) state.notes[index][col] = state.notes[index][col].filter((note) => note !== value);
   }
 }
-function fillAutoCandidates() {
-  if (complete()) return;
-  pushHistory();
-  state.notes = state.notes.map((rowNotes, row) => rowNotes.map((cellNotes, col) => {
+function candidateNotesForGrid() {
+  return state.notes.map((rowNotes, row) => rowNotes.map((cellNotes, col) => {
     if (state.grid[row][col] || state.puzzle[row][col]) return [];
     return boardCandidates(state.grid, row, col);
   }));
+}
+function refreshAutoCandidates() {
+  if (state.autoCandidates) state.notes = candidateNotesForGrid();
+}
+function toggleAutoCandidates() {
+  if (complete()) return;
+  pushHistory();
+  if (state.autoCandidates) {
+    state.notes = state.autoCandidateSnapshot ? cloneNotes(state.autoCandidateSnapshot) : notesGrid();
+    state.autoCandidates = false;
+    state.autoCandidateSnapshot = null;
+  } else {
+    state.autoCandidateSnapshot = cloneNotes(state.notes);
+    state.autoCandidates = true;
+    state.notes = candidateNotesForGrid();
+  }
   render();
 }
 function moveSelection(rowDelta, colDelta) {
@@ -454,7 +469,7 @@ function tick() {
   if (timer) timer.textContent = formatTime(state.elapsed);
 }
 function complete() { return state.grid.every((row, r) => row.every((value, c) => value === state.solution[r][c])); }
-function pushHistory() { state.history = [...state.history, { grid: clone(state.grid), notes: state.notes.map((row) => row.map((cell) => [...cell])), mistakes: state.mistakes, hints: state.hints, elapsed: state.elapsed || 0 }].slice(-40); }
+function pushHistory() { state.history = [...state.history, { grid: clone(state.grid), notes: cloneNotes(state.notes), mistakes: state.mistakes, hints: state.hints, elapsed: state.elapsed || 0, autoCandidates: state.autoCandidates || false, autoCandidateSnapshot: state.autoCandidateSnapshot ? cloneNotes(state.autoCandidateSnapshot) : null }].slice(-40); }
 function select(row, col) { state.selected = { row, col }; render(); }
 function place(value) {
   const { row, col } = state.selected;
@@ -469,6 +484,7 @@ function place(value) {
     state.notes[row][col] = [];
     if (value === state.solution[row][col]) cleanRelatedNotes(row, col, value);
     else state.mistakes += 1;
+    refreshAutoCandidates();
   }
   render();
 }
@@ -484,10 +500,12 @@ function undo() {
   const last = state.history.pop();
   if (!last) return;
   state.grid = clone(last.grid);
-  state.notes = last.notes.map((row) => row.map((cell) => [...cell]));
+  state.notes = cloneNotes(last.notes);
   state.mistakes = last.mistakes;
   state.hints = last.hints;
   state.elapsed = last.elapsed ?? state.elapsed;
+  state.autoCandidates = last.autoCandidates || false;
+  state.autoCandidateSnapshot = last.autoCandidateSnapshot ? cloneNotes(last.autoCandidateSnapshot) : null;
   render();
 }
 function hint() {
@@ -501,9 +519,14 @@ function hint() {
   state.notes[target.row][target.col] = [];
   state.selected = target;
   state.hints -= 1;
+  refreshAutoCandidates();
   render();
 }
 function restart(level = state.level) { state = newState(level); render(); }
+function requestRestart(level = state.level) {
+  if (!complete() && !window.confirm('Yeni oyun açmak istediğine emin misin?')) return;
+  restart(level);
+}
 function cellClass(row, col, value) {
   const selectedValue = state.grid[state.selected.row][state.selected.col];
   const peer = state.selected.row === row || state.selected.col === col || (Math.floor(state.selected.row / BOX) === Math.floor(row / BOX) && Math.floor(state.selected.col / BOX) === Math.floor(col / BOX));
@@ -515,7 +538,7 @@ function render() {
   document.querySelector('#root').innerHTML = `
     <main class="app-shell">
       <section class="hero compact"><div><p class="eyebrow">Kireçte Troçki</p></div><button class="new-game" data-action="new">↻ Yeni oyun</button></section>
-      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div><div class="tools"><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button><button data-action="auto-candidates">☷ Auto-candidate</button><button data-action="nyt-hard">NYT Hard ↗</button></div>${complete() ? '<div class="win">🏆 Tebrikler, bu seviye çözüldü.</div>' : ''}</aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${state.notes[r][c].map((note) => `<em>${note}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div><div class="number-pad">${DIGITS.map((value) => `<button data-number="${value}">${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div></div></section>
+      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div><div class="tools"><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button><button class="${state.autoCandidates ? 'active-tool' : ''}" data-action="auto-candidates">☷ Auto-candidate</button><button data-action="nyt-hard">NYT Hard ↗</button></div>${complete() ? '<div class="win">🏆 Tebrikler, bu seviye çözüldü.</div>' : ''}</aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${state.notes[r][c].map((note) => `<em>${note}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div><div class="number-pad">${DIGITS.map((value) => `<button data-number="${value}">${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div></div></section>
     </main>`;
 }
 let state = loadState();
@@ -526,13 +549,13 @@ document.addEventListener('click', (event) => {
   if (!button) return;
   if (button.dataset.row) select(Number(button.dataset.row), Number(button.dataset.col));
   if (button.dataset.number) place(Number(button.dataset.number));
-  if (button.dataset.level) restart(button.dataset.level);
-  if (button.dataset.action === 'new') restart();
+  if (button.dataset.level) requestRestart(button.dataset.level);
+  if (button.dataset.action === 'new') requestRestart();
   if (button.dataset.action === 'note') { state.noteMode = !state.noteMode; render(); }
   if (button.dataset.action === 'hint') hint();
   if (button.dataset.action === 'undo') undo();
   if (button.dataset.action === 'erase') erase();
-  if (button.dataset.action === 'auto-candidates') fillAutoCandidates();
+  if (button.dataset.action === 'auto-candidates') toggleAutoCandidates();
   if (button.dataset.action === 'nyt-hard') openNytHardSudoku();
 });
 document.addEventListener('keydown', (event) => {
@@ -545,7 +568,7 @@ document.addEventListener('keydown', (event) => {
   else if (/^[1-9]$/.test(key)) { event.preventDefault(); place(Number(key)); }
   else if (key === 'Backspace' || key === 'Delete' || key === '0') { event.preventDefault(); erase(); }
   else if (key.toLowerCase() === 'n') { event.preventDefault(); state.noteMode = !state.noteMode; render(); }
-  else if (key.toLowerCase() === 'a') { event.preventDefault(); fillAutoCandidates(); }
+  else if (key.toLowerCase() === 'a') { event.preventDefault(); toggleAutoCandidates(); }
 });
 try {
   render();
