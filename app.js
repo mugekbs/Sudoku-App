@@ -417,6 +417,26 @@ function loadState() {
   return newState();
 }
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function cleanRelatedNotes(row, col, value) {
+  for (let index = 0; index < SIZE; index += 1) {
+    if (index !== col) state.notes[row][index] = state.notes[row][index].filter((note) => note !== value);
+    if (index !== row) state.notes[index][col] = state.notes[index][col].filter((note) => note !== value);
+  }
+}
+function fillAutoCandidates() {
+  if (complete()) return;
+  pushHistory();
+  state.notes = state.notes.map((rowNotes, row) => rowNotes.map((cellNotes, col) => {
+    if (state.grid[row][col] || state.puzzle[row][col]) return [];
+    return boardCandidates(state.grid, row, col);
+  }));
+  render();
+}
+function moveSelection(rowDelta, colDelta) {
+  const nextRow = (state.selected.row + rowDelta + SIZE) % SIZE;
+  const nextCol = (state.selected.col + colDelta + SIZE) % SIZE;
+  select(nextRow, nextCol);
+}
 function formatTime(seconds) {
   const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
   const rest = (seconds % 60).toString().padStart(2, '0');
@@ -443,7 +463,8 @@ function place(value) {
   } else {
     state.grid[row][col] = value;
     state.notes[row][col] = [];
-    if (value !== state.solution[row][col]) state.mistakes += 1;
+    if (value === state.solution[row][col]) cleanRelatedNotes(row, col, value);
+    else state.mistakes += 1;
   }
   render();
 }
@@ -490,7 +511,7 @@ function render() {
   document.querySelector('#root').innerHTML = `
     <main class="app-shell">
       <section class="hero compact"><div><p class="eyebrow">Kireçte Troçki</p></div><button class="new-game" data-action="new">↻ Yeni oyun</button></section>
-      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div><div class="tools"><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button></div>${complete() ? '<div class="win">🏆 Tebrikler, bu seviye çözüldü.</div>' : ''}</aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${state.notes[r][c].map((note) => `<em>${note}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div><div class="number-pad">${DIGITS.map((value) => `<button data-number="${value}">${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div></div></section>
+      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div><div class="tools"><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button><button data-action="auto-candidates">☷ Auto-candidate</button></div>${complete() ? '<div class="win">🏆 Tebrikler, bu seviye çözüldü.</div>' : ''}</aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${state.notes[r][c].map((note) => `<em>${note}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div><div class="number-pad">${DIGITS.map((value) => `<button data-number="${value}">${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div></div></section>
     </main>`;
 }
 let state = loadState();
@@ -507,6 +528,19 @@ document.addEventListener('click', (event) => {
   if (button.dataset.action === 'hint') hint();
   if (button.dataset.action === 'undo') undo();
   if (button.dataset.action === 'erase') erase();
+  if (button.dataset.action === 'auto-candidates') fillAutoCandidates();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  const key = event.key;
+  if (key === 'ArrowUp') { event.preventDefault(); moveSelection(-1, 0); }
+  else if (key === 'ArrowDown') { event.preventDefault(); moveSelection(1, 0); }
+  else if (key === 'ArrowLeft') { event.preventDefault(); moveSelection(0, -1); }
+  else if (key === 'ArrowRight') { event.preventDefault(); moveSelection(0, 1); }
+  else if (/^[1-9]$/.test(key)) { event.preventDefault(); place(Number(key)); }
+  else if (key === 'Backspace' || key === 'Delete' || key === '0') { event.preventDefault(); erase(); }
+  else if (key.toLowerCase() === 'n') { event.preventDefault(); state.noteMode = !state.noteMode; render(); }
+  else if (key.toLowerCase() === 'a') { event.preventDefault(); fillAutoCandidates(); }
 });
 try {
   render();
