@@ -35,7 +35,7 @@ button:active { transform: scale(.98); }
 .catwalk { position: absolute; top: 8px; right: 18px; z-index: 4; pointer-events: none; }
 .cat { display: inline-block; font-size: 2.35rem; filter: grayscale(1) contrast(1.4) brightness(.25); transform: rotate(7deg); }
 .board { aspect-ratio: 1; display: grid; grid-template-columns: repeat(9, 1fr); border: 3px solid #152238; border-radius: 18px; overflow: hidden; background: #152238; gap: 1px; }
-.cell { position: relative; display: grid; place-items: center; min-width: 0; aspect-ratio: 1; border: 0; background: #fff; color: #3762f5; font-size: clamp(1.25rem, 4vw, 2.2rem); font-weight: 700; }
+.cell { position: relative; display: grid; place-items: center; min-width: 0; aspect-ratio: 1; border: 0; background: #fff; color: #3762f5; font-size: 2rem; font-weight: 700; }
 .cell:nth-child(3n) { border-right: 2px solid #152238; }
 .cell:nth-child(n+19):nth-child(-n+27), .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid #152238; }
 .cell:nth-child(9n) { border-right: 0; }
@@ -44,7 +44,7 @@ button:active { transform: scale(.98); }
 .cell.same-number { background: #dbe7ff; }
 .cell.selected { background: #bcd2ff; box-shadow: inset 0 0 0 3px #3d66ff; z-index: 2; }
 .cell.wrong { color: #e04444; background: #fff0f0; }
-.cell small { display: grid; grid-template-columns: repeat(3, 1fr); width: 80%; height: 80%; color: #697892; font-size: clamp(.45rem, 1.5vw, .8rem); font-weight: 800; font-style: normal; }
+.cell small { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); width: 82%; height: 82%; color: #697892; font-size: .72rem; font-weight: 800; font-style: normal; line-height: 1; }
 .cell em { font-style: normal; display: grid; place-items: center; }
 .number-pad { display: grid; grid-template-columns: repeat(10, 1fr); gap: 10px; margin-top: 18px; }
 .number-pad button { padding: 16px 8px; background: #152238; color: white; font-size: 1.35rem; font-weight: 800; }
@@ -58,5 +58,4 @@ button:active { transform: scale(.98); }
   .app-shell { width: min(100% - 18px, 1180px); padding-top: 16px; }
   .sidebar { order: 2; }
   .board-wrap { padding: 8px; border-radius: 22px; }
-  .cell { font-size: 1.15rem; }
 }
