@@ -13,7 +13,7 @@ button { font: inherit; }
 .eyebrow { color: #111827; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; margin: 0; font-size: clamp(1.35rem, 4vw, 2.4rem); }
 h1 { font-size: clamp(2rem, 5vw, 4.2rem); line-height: 0.95; margin: 0; max-width: 720px; }
 .intro { color: #5f6d82; font-size: 1.08rem; max-width: 620px; }
-.new-game, .tools button, .level, .number-pad button { border: 0; cursor: pointer; border-radius: 18px; transition: transform .15s ease, box-shadow .15s ease, background .15s ease; }
+.new-game, .tools button, .level, .number-pad button, .action-pad button { border: 0; cursor: pointer; border-radius: 18px; transition: transform .15s ease, box-shadow .15s ease, background .15s ease; }
 .new-game { display: inline-flex; align-items: center; gap: 10px; background: #152238; color: white; padding: 14px 18px; box-shadow: 0 18px 40px #15223833; white-space: nowrap; }
 button:active { transform: scale(.98); }
 .game-panel { display: grid; grid-template-columns: 330px 1fr; gap: 28px; align-items: start; }
@@ -29,7 +29,7 @@ button:active { transform: scale(.98); }
 .stats strong { display: block; color: #152238; font-size: 1.3rem; }
 .tools { display: grid; gap: 10px; }
 .tools button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; background: #edf1f7; color: #152238; }
-.tools .active-tool { background: #ffeab6; }
+.tools .active-tool, .action-pad .active-tool { background: #ffeab6; }
 .win { margin-top: 16px; display: flex; align-items: center; gap: 8px; background: #e9f9ef; color: #176a35; padding: 14px; border-radius: 18px; font-weight: 700; }
 .board-wrap { position: relative; padding: clamp(14px, 3vw, 28px); overflow: hidden; }
 .catwalk { position: absolute; top: 8px; right: 18px; z-index: 4; pointer-events: none; }
@@ -46,16 +46,23 @@ button:active { transform: scale(.98); }
 .cell.wrong { color: #e04444; background: #fff0f0; }
 .cell small { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); width: 82%; height: 82%; color: #697892; font-size: .72rem; font-weight: 800; font-style: normal; line-height: 1; }
 .cell em { font-style: normal; display: grid; place-items: center; }
-.number-pad { display: grid; grid-template-columns: repeat(10, 1fr); gap: 10px; margin-top: 18px; }
-.number-pad button { padding: 16px 8px; background: #152238; color: white; font-size: 1.35rem; font-weight: 800; }
-.number-pad .erase { background: #edf1f7; color: #152238; font-size: 1rem; }
+.number-pad, .action-pad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 18px; }
+.action-pad { margin-top: 10px; }
+.number-pad button, .action-pad button { min-height: 54px; padding: 12px 8px; background: #152238; color: white; font-size: 1rem; font-weight: 800; }
+.number-pad button { font-size: 1.35rem; }
+.number-pad .erase, .action-pad button { background: #edf1f7; color: #152238; }
+.number-pad .complete-number { background: #e4e8ef; color: #98a2b3; cursor: not-allowed; box-shadow: none; }
+.completion-banner { margin-top: 14px; background: #e9f9ef; color: #176a35; padding: 14px; border-radius: 18px; text-align: center; font-weight: 900; }
 @media (max-width: 880px) {
   .hero, .game-panel { grid-template-columns: 1fr; display: grid; }
   .new-game { justify-content: center; }
-  .number-pad { grid-template-columns: repeat(5, 1fr); }
+  .number-pad, .action-pad { grid-template-columns: repeat(5, 1fr); }
 }
 @media (max-width: 520px) {
   .app-shell { width: min(100% - 18px, 1180px); padding-top: 16px; }
   .sidebar { order: 2; }
   .board-wrap { padding: 8px; border-radius: 22px; }
+  .number-pad, .action-pad { gap: 8px; }
+  .number-pad button, .action-pad button { min-height: 48px; font-size: .9rem; }
+  .number-pad button { font-size: 1.2rem; }
 }
