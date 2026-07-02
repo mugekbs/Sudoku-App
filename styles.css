@@ -40,10 +40,8 @@ button:active { transform: scale(.98); }
 .cell:nth-child(n+19):nth-child(-n+27), .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid #152238; }
 .cell:nth-child(9n) { border-right: 0; }
 .cell.given { color: #152238; background: #fbfcff; }
-.cell.peer { background: #eef4ff; }
-.cell.same-number { background: #dbe7ff; }
-.cell.selected { background: #bcd2ff; box-shadow: inset 0 0 0 3px #3d66ff; z-index: 2; }
-.cell.wrong { color: #e04444; background: #fff0f0; }
+.cell.peer, .cell.same-number, .cell.wrong { background: #fff; }
+.cell.selected { background: #fff; box-shadow: inset 0 0 0 2px #152238; z-index: 2; }
 .cell small { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); width: 82%; height: 82%; color: #697892; font-size: .72rem; font-weight: 800; font-style: normal; line-height: 1; }
 .cell em { font-style: normal; display: grid; place-items: center; }
 .number-pad, .action-pad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 18px; }
