@@ -1,12 +1,12 @@
 const SIZE = 9;
 const BOX = 3;
 const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-const STORAGE_KEY = 'kirecte-trocki-state-v3';
+const STORAGE_KEY = 'kirecte-trocki-state-v4';
 const NYT_HARD_SUDOKU_URL = 'https://www.nytimes.com/puzzles/sudoku/hard';
 const LEVELS = {
-  uzman: { label: 'Uzman', holes: 46, minScore: 520, subtitle: 'Mantıksal uzman' },
-  ekstrem: { label: 'Ekstrem', holes: 50, minScore: 700, requireAdvanced: true, subtitle: 'Tek çözüm, zor mantık' },
-  kabus: { label: 'Kâbus', holes: 53, minScore: 900, requireAdvanced: true, subtitle: 'Tahminsiz meydan okuma' },
+  uzman: { label: 'Uzman', holes: 48, minScore: 850, subtitle: 'Mantıksal uzman' },
+  ekstrem: { label: 'Ekstrem', holes: 53, minScore: 1350, requireAdvanced: true, subtitle: 'Tek çözüm, zor mantık' },
+  kabus: { label: 'Kâbus', holes: 57, minScore: 1300, requireNightmare: true, subtitle: 'Tahminsiz meydan okuma' },
 };
 const TECHNIQUE_SCORE = { nakedSingle: 8, hiddenSingle: 22, nakedPair: 110, pointingPair: 160, boxLineReduction: 190, hiddenPair: 230, nakedTriple: 300, hiddenTriple: 360, xWing: 480, swordfish: 720, xyWing: 820 };
 const EMPTY = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
@@ -341,7 +341,7 @@ function emptyTechniqueStats() { return { nakedSingle: 0, hiddenSingle: 0, naked
 function rateTechniqueStats(techniques) {
   return Object.entries(techniques).reduce((total, [technique, count]) => total + (TECHNIQUE_SCORE[technique] || 0) * count, 0);
 }
-const HUMAN_LOGIC_STEPS = [applyNakedSingle, applyHiddenSingle, applyNakedPair, applyPointingPair, applyBoxLineReduction, applyHiddenPair, applyNakedTriple, applyHiddenTriple];
+const HUMAN_LOGIC_STEPS = [applyNakedSingle, applyHiddenSingle, applyNakedPair, applyPointingPair, applyBoxLineReduction, applyHiddenPair, applyNakedTriple, applyHiddenTriple, applyXWing, applySwordfish, applyXYWing];
 function logicSolve(puzzle, logicSteps = HUMAN_LOGIC_STEPS) {
   const board = clone(puzzle);
   const techniques = emptyTechniqueStats();
@@ -365,7 +365,8 @@ function completeBoard(board) {
 function meetsDifficulty(level, rating) {
   const config = LEVELS[level];
   return rating.score >= config.minScore
-    && (!config.requireAdvanced || rating.techniques.pointingPair > 0 || rating.techniques.boxLineReduction > 0 || rating.techniques.hiddenPair > 0 || rating.techniques.nakedTriple > 0 || rating.techniques.hiddenTriple > 0);
+    && (!config.requireAdvanced || rating.techniques.pointingPair > 0 || rating.techniques.boxLineReduction > 0 || rating.techniques.hiddenPair > 0 || rating.techniques.nakedTriple > 0 || rating.techniques.hiddenTriple > 0 || rating.techniques.xWing > 0 || rating.techniques.swordfish > 0 || rating.techniques.xyWing > 0)
+    && (!config.requireNightmare || rating.techniques.xWing > 0 || rating.techniques.swordfish > 0 || rating.techniques.xyWing > 0 || rating.techniques.hiddenTriple > 0);
 }
 function betterPuzzle(candidate, current) {
   if (!current) return true;
@@ -375,7 +376,7 @@ function betterPuzzle(candidate, current) {
 function generate(level) {
   const target = LEVELS[level].holes;
   let best = null;
-  const maxAttempts = level === 'kabus' ? 18 : 12;
+  const maxAttempts = level === 'kabus' ? 12 : 18;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const solution = clone(EMPTY);
     fill(solution);
@@ -533,10 +534,8 @@ function requestRestart(level = state.level) {
 function numberComplete(value) {
   return state.grid.flat().filter((cell) => cell === value).length >= SIZE;
 }
-function cellClass(row, col, value) {
-  const selectedValue = state.grid[state.selected.row][state.selected.col];
-  const peer = state.selected.row === row || state.selected.col === col || (Math.floor(state.selected.row / BOX) === Math.floor(row / BOX) && Math.floor(state.selected.col / BOX) === Math.floor(col / BOX));
-  return ['cell', state.selected.row === row && state.selected.col === col && 'selected', peer && 'peer', selectedValue && selectedValue === value && 'same-number', state.puzzle[row][col] && 'given', value && value !== state.solution[row][col] && 'wrong'].filter(Boolean).join(' ');
+function cellClass(row, col) {
+  return ['cell', state.selected.row === row && state.selected.col === col && 'selected', state.puzzle[row][col] && 'given'].filter(Boolean).join(' ');
 }
 function render() {
   save();
@@ -544,7 +543,7 @@ function render() {
   document.querySelector('#root').innerHTML = `
     <main class="app-shell">
       <section class="hero compact"><div><p class="eyebrow">Kireçte Troçki</p></div></section>
-      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div></aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${DIGITS.map((note) => `<em>${state.notes[r][c].includes(note) ? note : ''}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div>${complete() ? '<div class="completion-banner">🏆 Tebrikler! Bu Sudoku tamamlandı.</div>' : ''}<div class="number-pad">${DIGITS.map((value) => `<button class="${numberComplete(value) ? 'complete-number' : ''}" data-number="${value}" ${numberComplete(value) ? 'disabled' : ''}>${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div><div class="action-pad"><button data-action="new">↻ Yeni oyun</button><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button><button class="${state.autoCandidates ? 'active-tool' : ''}" data-action="auto-candidates">☷ Auto-candidate</button><button data-action="nyt-hard">NYT Hard ↗</button></div></div></section>
+      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div></aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${DIGITS.map((note) => `<em>${state.notes[r][c].includes(note) ? note : ''}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div>${complete() ? '<div class="completion-banner">🏆 Tebrikler! Bu Sudoku tamamlandı.</div>' : ''}<div class="number-pad">${DIGITS.map((value) => `<button class="${numberComplete(value) ? 'complete-number' : ''}" data-number="${value}" ${numberComplete(value) ? 'disabled' : ''}>${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div><div class="action-pad"><button data-action="new">↻ Yeni oyun</button><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button><button class="${state.autoCandidates ? 'active-tool' : ''}" data-action="auto-candidates">☷ Auto-candidate</button><button data-action="nyt-hard">NYT Hard ↗</button></div></div></section>
     </main>`;
 }
 let state = loadState();
