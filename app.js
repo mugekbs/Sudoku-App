@@ -428,6 +428,14 @@ function cleanRelatedNotes(row, col, value) {
     if (index !== col) state.notes[row][index] = state.notes[row][index].filter((note) => note !== value);
     if (index !== row) state.notes[index][col] = state.notes[index][col].filter((note) => note !== value);
   }
+  const boxRow = Math.floor(row / BOX) * BOX;
+  const boxCol = Math.floor(col / BOX) * BOX;
+  for (let r = boxRow; r < boxRow + BOX; r += 1) {
+    for (let c = boxCol; c < boxCol + BOX; c += 1) {
+      if (r === row && c === col) continue;
+      state.notes[r][c] = state.notes[r][c].filter((note) => note !== value);
+    }
+  }
 }
 function candidateNotesForGrid() {
   return state.notes.map((rowNotes, row) => rowNotes.map((cellNotes, col) => {
@@ -534,8 +542,8 @@ function requestRestart(level = state.level) {
 function numberComplete(value) {
   return state.grid.flat().filter((cell) => cell === value).length >= SIZE;
 }
-function cellClass(row, col) {
-  return ['cell', state.selected.row === row && state.selected.col === col && 'selected', state.puzzle[row][col] && 'given'].filter(Boolean).join(' ');
+function cellClass(row, col, value) {
+  return ['cell', state.selected.row === row && state.selected.col === col && 'selected', state.puzzle[row][col] && 'given', value && value !== state.solution[row][col] && 'wrong'].filter(Boolean).join(' ');
 }
 function render() {
   save();
@@ -543,7 +551,7 @@ function render() {
   document.querySelector('#root').innerHTML = `
     <main class="app-shell">
       <section class="hero compact"><div><p class="eyebrow">Kireçte Troçki</p></div></section>
-      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div></aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${DIGITS.map((note) => `<em>${state.notes[r][c].includes(note) ? note : ''}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div>${complete() ? '<div class="completion-banner">🏆 Tebrikler! Bu Sudoku tamamlandı.</div>' : ''}<div class="number-pad">${DIGITS.map((value) => `<button class="${numberComplete(value) ? 'complete-number' : ''}" data-number="${value}" ${numberComplete(value) ? 'disabled' : ''}>${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div><div class="action-pad"><button data-action="new">↻ Yeni oyun</button><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button><button class="${state.autoCandidates ? 'active-tool' : ''}" data-action="auto-candidates">☷ Auto-candidate</button><button data-action="nyt-hard">NYT Hard ↗</button></div></div></section>
+      <section class="game-panel"><aside class="sidebar"><div class="level-grid">${Object.entries(LEVELS).map(([key, level]) => `<button class="level ${state.level === key ? 'active' : ''}" data-level="${key}"><strong>${level.label}</strong><span>${level.subtitle}</span></button>`).join('')}</div><div class="stats"><span>Süre <strong data-timer>${formatTime(state.elapsed || 0)}</strong></span><span>Hata <strong>${state.mistakes}</strong></span><span>İpucu <strong>${state.hints}</strong></span><span>Boş <strong>${blanks}</strong></span></div></aside><div class="board-wrap"><div class="catwalk" aria-hidden="true"><span class="cat">🐈‍⬛</span></div><div class="board" aria-label="Sudoku tahtası">${state.grid.map((row, r) => row.map((value, c) => `<button class="${cellClass(r, c, value)}" data-row="${r}" data-col="${c}">${value ? `<span>${value}</span>` : `<small>${DIGITS.map((note) => `<em>${state.notes[r][c].includes(note) ? note : ''}</em>`).join('')}</small>`}</button>`).join('')).join('')}</div>${complete() ? '<div class="completion-banner">🏆 Tebrikler! Bu Sudoku tamamlandı.</div>' : ''}<div class="number-pad">${DIGITS.map((value) => `<button class="${numberComplete(value) ? 'complete-number' : ''}" data-number="${value}" ${numberComplete(value) ? 'disabled' : ''}>${value}</button>`).join('')}<button class="erase" data-action="erase">Sil</button></div><div class="action-pad"><button data-action="new">↻ Yeni oyun</button><button class="${state.noteMode ? 'active-tool' : ''}" data-action="note">✎ Not</button><button data-action="hint">💡 İpucu</button><button data-action="undo">↶ Geri al</button><button class="${state.autoCandidates ? 'active-tool' : ''}" data-action="auto-candidates">☷ Auto-candidate</button><button data-action="nyt-hard">NYT Hard ↗</button></div></div></section>
     </main>`;
 }
 let state = loadState();
