@@ -506,6 +506,7 @@ function erase() {
   pushHistory();
   state.grid[row][col] = 0;
   state.notes[row][col] = [];
+  refreshAutoCandidates();
   render();
 }
 function undo() {
@@ -540,7 +541,13 @@ function requestRestart(level = state.level) {
   restart(level);
 }
 function numberComplete(value) {
-  return state.grid.flat().filter((cell) => cell === value).length >= SIZE;
+  let count = 0;
+  for (let r = 0; r < SIZE; r += 1) {
+    for (let c = 0; c < SIZE; c += 1) {
+      if (state.grid[r][c] === value && value === state.solution[r][c]) count += 1;
+    }
+  }
+  return count >= SIZE;
 }
 function cellClass(row, col, value) {
   return ['cell', state.selected.row === row && state.selected.col === col && 'selected', state.puzzle[row][col] && 'given', value && value !== state.solution[row][col] && 'wrong'].filter(Boolean).join(' ');
