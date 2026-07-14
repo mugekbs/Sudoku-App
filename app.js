@@ -403,7 +403,7 @@ function generate(level) {
 }
 function newState(level = 'uzman') {
   const { puzzle, solution, rating } = generate(level);
-  return { level, puzzle, solution, rating, grid: clone(puzzle), notes: notesGrid(), autoCandidates: false, autoCandidateSnapshot: null, selected: { row: 0, col: 0 }, noteMode: false, mistakes: 0, hints: 3, elapsed: 0, history: [] };
+  return { level, puzzle, solution, rating, grid: clone(puzzle), notes: notesGrid(), autoCandidates: false, autoCandidateSnapshot: null, excludedAutoNotes: notesGrid(), selected: { row: 0, col: 0 }, noteMode: false, mistakes: 0, hints: 3, elapsed: 0, history: [] };
 }
 function isValidSavedState(saved) {
   return saved?.puzzle?.length === SIZE
@@ -416,7 +416,7 @@ function isValidSavedState(saved) {
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (isValidSavedState(saved)) return { ...saved, rating: saved.rating || logicSolve(saved.puzzle), elapsed: saved.elapsed || 0, history: saved.history || [], autoCandidates: saved.autoCandidates || false, autoCandidateSnapshot: saved.autoCandidateSnapshot || null };
+    if (isValidSavedState(saved)) return { ...saved, rating: saved.rating || logicSolve(saved.puzzle), elapsed: saved.elapsed || 0, history: saved.history || [], autoCandidates: saved.autoCandidates || false, autoCandidateSnapshot: saved.autoCandidateSnapshot || null, excludedAutoNotes: saved.excludedAutoNotes || notesGrid() };
   } catch {
     localStorage.removeItem(STORAGE_KEY);
   }
@@ -440,8 +440,15 @@ function cleanRelatedNotes(row, col, value) {
 function candidateNotesForGrid() {
   return state.notes.map((rowNotes, row) => rowNotes.map((cellNotes, col) => {
     if (state.grid[row][col] || state.puzzle[row][col]) return [];
-    return boardCandidates(state.grid, row, col);
+    const excluded = (state.excludedAutoNotes && state.excludedAutoNotes[row][col]) || [];
+    return boardCandidates(state.grid, row, col).filter((value) => !excluded.includes(value));
   }));
+}
+function setExcludedNote(row, col, value, excluded) {
+  if (!state.excludedAutoNotes) state.excludedAutoNotes = notesGrid();
+  const set = new Set(state.excludedAutoNotes[row][col]);
+  excluded ? set.add(value) : set.delete(value);
+  state.excludedAutoNotes[row][col] = [...set].sort((a, b) => a - b);
 }
 function refreshAutoCandidates() {
   if (state.autoCandidates) state.notes = candidateNotesForGrid();
@@ -456,6 +463,7 @@ function toggleAutoCandidates() {
   } else {
     state.autoCandidateSnapshot = cloneNotes(state.notes);
     state.autoCandidates = true;
+    state.excludedAutoNotes = notesGrid();
     state.notes = candidateNotesForGrid();
   }
   render();
@@ -481,7 +489,7 @@ function tick() {
   if (timer) timer.textContent = formatTime(state.elapsed);
 }
 function complete() { return state.grid.every((row, r) => row.every((value, c) => value === state.solution[r][c])); }
-function pushHistory() { state.history = [...state.history, { grid: clone(state.grid), notes: cloneNotes(state.notes), mistakes: state.mistakes, hints: state.hints, elapsed: state.elapsed || 0, autoCandidates: state.autoCandidates || false, autoCandidateSnapshot: state.autoCandidateSnapshot ? cloneNotes(state.autoCandidateSnapshot) : null }].slice(-40); }
+function pushHistory() { state.history = [...state.history, { grid: clone(state.grid), notes: cloneNotes(state.notes), mistakes: state.mistakes, hints: state.hints, elapsed: state.elapsed || 0, autoCandidates: state.autoCandidates || false, autoCandidateSnapshot: state.autoCandidateSnapshot ? cloneNotes(state.autoCandidateSnapshot) : null, excludedAutoNotes: state.excludedAutoNotes ? cloneNotes(state.excludedAutoNotes) : null }].slice(-40); }
 function select(row, col) { state.selected = { row, col }; render(); }
 function place(value) {
   const { row, col } = state.selected;
@@ -489,11 +497,14 @@ function place(value) {
   pushHistory();
   if (state.noteMode) {
     const set = new Set(state.notes[row][col]);
-    set.has(value) ? set.delete(value) : set.add(value);
+    const removing = set.has(value);
+    removing ? set.delete(value) : set.add(value);
     state.notes[row][col] = [...set].sort((a, b) => a - b);
+    if (state.autoCandidates) setExcludedNote(row, col, value, removing);
   } else {
     state.grid[row][col] = value;
     state.notes[row][col] = [];
+    if (state.excludedAutoNotes) state.excludedAutoNotes[row][col] = [];
     if (value === state.solution[row][col]) cleanRelatedNotes(row, col, value);
     else state.mistakes += 1;
     refreshAutoCandidates();
@@ -506,6 +517,7 @@ function erase() {
   pushHistory();
   state.grid[row][col] = 0;
   state.notes[row][col] = [];
+  if (state.excludedAutoNotes) state.excludedAutoNotes[row][col] = [];
   refreshAutoCandidates();
   render();
 }
@@ -519,6 +531,7 @@ function undo() {
   state.elapsed = last.elapsed ?? state.elapsed;
   state.autoCandidates = last.autoCandidates || false;
   state.autoCandidateSnapshot = last.autoCandidateSnapshot ? cloneNotes(last.autoCandidateSnapshot) : null;
+  state.excludedAutoNotes = last.excludedAutoNotes ? cloneNotes(last.excludedAutoNotes) : notesGrid();
   render();
 }
 function hint() {
@@ -530,6 +543,7 @@ function hint() {
   pushHistory();
   state.grid[target.row][target.col] = state.solution[target.row][target.col];
   state.notes[target.row][target.col] = [];
+  if (state.excludedAutoNotes) state.excludedAutoNotes[target.row][target.col] = [];
   state.selected = target;
   state.hints -= 1;
   refreshAutoCandidates();
