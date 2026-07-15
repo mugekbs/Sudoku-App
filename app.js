@@ -463,7 +463,7 @@ function toggleAutoCandidates() {
   } else {
     state.autoCandidateSnapshot = cloneNotes(state.notes);
     state.autoCandidates = true;
-    state.excludedAutoNotes = notesGrid();
+    if (!state.excludedAutoNotes) state.excludedAutoNotes = notesGrid();
     state.notes = candidateNotesForGrid();
   }
   render();
